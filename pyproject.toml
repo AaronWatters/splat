@@ -1,0 +1,17 @@
+[build-system]
+requires = ["flit_core>=3.9,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "splat"
+version = "0.1.0"
+description = "Utilities for inspecting NumPy files."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+[project.scripts]
+inspect-npy = "splat.inspect_npy:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
