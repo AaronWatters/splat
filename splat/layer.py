@@ -24,6 +24,7 @@ class Layer:
             "scribble": layer_interaction.ScribbleInteraction(self),
             "lasso": layer_interaction.LassoInteraction(self),
             "fill": layer_interaction.FillInteraction(self),
+            "replace": layer_interaction.ReplaceInteraction(self),
         }
         self.interaction_dropdown = gz.DropDownSelect(
             list(self.interaction_modes.keys()),
@@ -195,6 +196,10 @@ class Layer:
         self.current_labels = fill_from_point(self.current_labels, start_point=start_point, to_target=to_target)
         self.update_image()
 
+    def replace_at(self, start_point=None, to_value=255):
+        self.current_labels = replace_from_point(self.current_labels, start_point=start_point, to_value=to_value)
+        self.update_image()
+
 
 def fill_from_point(array, start_point=None, to_target=255):
     if start_point is None:
@@ -211,3 +216,21 @@ def fill_from_point(array, start_point=None, to_target=255):
                 if 0 <= ni < filled.shape[0] and 0 <= nj < filled.shape[1]:
                     to_fill.append((ni, nj))
     return filled
+
+
+def replace_from_point(array, start_point=None, to_value=255):
+    if start_point is None:
+        start_point = (array.shape[0] // 2, array.shape[1] // 2)
+    from_value = array[start_point]
+    replaced = np.copy(array)
+    to_replace = [start_point]
+    while to_replace:
+        point = to_replace.pop()
+        i, j = point
+        if replaced[i, j] == from_value:
+            replaced[i, j] = to_value
+            neighbors = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
+            for ni, nj in neighbors:
+                if 0 <= ni < replaced.shape[0] and 0 <= nj < replaced.shape[1]:
+                    to_replace.append((ni, nj))
+    return replaced

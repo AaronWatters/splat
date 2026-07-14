@@ -25,7 +25,7 @@ class PickInteraction:
         ij = self.location(event)
         label = self.layer.current_labels[ij]
         self.layer.info.text(f"Picked label {label} at {ij}")
-        print(f"Picked label {label} at {ij}")
+        #pr(f"Picked label {label} at {ij}")
         self.layer.select_label(label)
 
     def location(self, event):
@@ -53,7 +53,7 @@ class ScribbleInteraction(PickInteraction):
     def on_pointerdown(self, event):
         ij = self.location(event)
         self.layer.info.text(f"Mouse down at {ij}")
-        print(f"Mouse down at {ij}")
+        #pr(f"Mouse down at {ij}")
         im = self.layer.image
         im.css({"cursor": "crosshair"})
         self.drawing = True
@@ -66,7 +66,7 @@ class ScribbleInteraction(PickInteraction):
         ij = self.location(event)
         arrayvalue = self.layer.current_labels[ij]
         self.layer.info.text(f"Mouse move at {ij} : label {arrayvalue}")
-        print(f"Mouse move at {ij}")
+        #pr(f"Mouse move at {ij}")
         if self.drawing:
             self.layer.set_pixel(ij)
             if self.last_pixel is not None:
@@ -77,7 +77,7 @@ class ScribbleInteraction(PickInteraction):
     def on_pointerup(self, event):
         ij = self.location(event)
         self.layer.info.text(f"Mouse up at {ij}")
-        print(f"Mouse up at {ij}")
+        #pr(f"Mouse up at {ij}")
         im = self.layer.image
         im.css({"cursor": "default"})
         if self.drawing:
@@ -91,7 +91,7 @@ class ScribbleInteraction(PickInteraction):
             #self.layer.connect_pixels(start, ij)
             self.draw_start = None
             self.layer.update_image()
-            self.layer.set_mode("pick") # switch back to pick mode after drawing
+            #self.layer.set_mode("pick") # switch back to pick mode after drawing
 
 class LassoInteraction(ScribbleInteraction):
     """
@@ -107,6 +107,20 @@ class FillInteraction(PickInteraction):
         ij = self.location(event)
         label = self.layer.selected_label
         self.layer.info.text(f"Fill from {ij} with label {label}")
-        print(f"Fill from {ij} with label {label}")
+        #pr(f"Fill from {ij} with label {label}")
         self.layer.fill_from(ij, label)
+        self.layer.set_mode("pick") # switch back to pick mode after filling
+
+class ReplaceInteraction(PickInteraction):
+    """
+    Interaction mode for replacing a label in a layer.
+    """
+    def on_click(self, event):
+        ij = self.location(event)
+        old_label = self.layer.current_labels[ij]
+        new_label = self.layer.selected_label
+        self.layer.info.text(f"Replace label {old_label} with {new_label} at {ij}")
+        #pr(f"Replace label {old_label} with {new_label} at {ij}")
+        self.layer.replace_at(ij, to_value=new_label)
+        self.layer.set_mode("pick") # switch back to pick mode after replacing
         
