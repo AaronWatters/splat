@@ -5,10 +5,10 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "splat"
 version = "0.1.0"
-description = "Utilities for inspecting NumPy files."
+description = "Interactive tool for creating, viewing, and editting 3d microscopy segmentations."
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["numpy"]
+dependencies = ["numpy", "h5gizmos"]
 
 [project.scripts]
 inspect-npy = "splat.inspect_npy:main"
