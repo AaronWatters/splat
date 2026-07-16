@@ -14,7 +14,8 @@ class Layer:
 
     def __init__(self, labels, intensities, commit_callback=None, width=None, height=None, max_label=None):
         print("Layer.__init__")
-        self.current_labels = labels
+        self.original_labels = labels
+        self.current_labels = labels.copy()
         if max_label is None:
             self.max_label = int(labels.max())
         else:
@@ -51,6 +52,10 @@ class Layer:
         self.selected_label = self.max_label
         self.label_input = gz.Input(initial_value=str(self.selected_label), change_callback=self.set_label)
         self.label_div = gz.Html("<div style='display:inline-block; width: 4em; height: 4em; background-color: red;'></div>")
+        self.commit_button = gz.Button("Commit", on_click=self.commit)
+        self.undo_button = gz.Button("Undo", on_click=self.undo)
+        self.checkpoint_button = gz.Button("Checkpoint", on_click=self.checkpoint)
+        self.revert_button = gz.Button("Revert", on_click=self.revert)
         self.dash = gz.Stack([
             self.info,
             self.mix_slider,
@@ -60,9 +65,41 @@ class Layer:
                 self.label_div,
                 self.interaction_dropdown,
                 ],
+            [
+                self.checkpoint_button,
+                self.undo_button,
+                self.revert_button,
+                self.commit_button,
+            ]
             ])
         self.dash.call_when_started(self.init_image)
         print ("Layer.__init__ done")
+
+    def checkpoint(self, *ignored):
+        self.undo_labels_history.append(self.current_labels.copy())
+        self.update_image()
+        self.info.text(f"Checkpoint created. History length: {len(self.undo_labels_history)}")
+
+    def undo(self, *ignored):
+        if len(self.undo_labels_history) == 0:
+            self.info.text("No history to undo.")
+            return
+        self.current_labels = self.undo_labels_history.pop()
+        self.update_image()
+        self.info.text(f"Undo performed. History length: {len(self.undo_labels_history)}")
+
+    def revert(self, *ignored):
+        labels = self.original_labels
+        intensities = self.intensities
+        self.change_arrays(labels, intensities)
+
+    def commit(self, *ignored):
+        labels = self.current_labels
+        intensities = self.intensities
+        if self.commit_callback is not None:
+            self.commit_callback(self.current_labels)
+        self.change_arrays(labels, intensities)
+        self.info.text("Changes committed.")
 
     def interaction_click(self, *ignored):
         [mode] = self.interaction_dropdown.selected_values
@@ -91,8 +128,10 @@ class Layer:
         print("id 2 value", self.interaction_dropdown.id2value)
 
     def change_arrays(self, labels, intensities):
-        self.current_labels = labels
+        self.original_labels = labels
+        self.current_labels = labels.copy()
         self.intensities = intensities
+        self.undo_labels_history = []
         self.update_image()
 
     def set_pixel(self, ij):
@@ -137,6 +176,14 @@ class Layer:
     def update_image(self, *ignored):
         carray = self.color_mix_array()
         self.image.change_array(carray, scale=False)
+        if len(self.undo_labels_history) > 0:
+            self.undo_button.set_enabled(True)
+            #self.commit_button.set_enabled(True)
+            #self.revert_button.set_enabled(True)
+        else:
+            self.undo_button.set_enabled(False)
+            #self.commit_button.set_enabled(False)
+            #self.revert_button.set_enabled(False)
 
     def color_mix_array(self):
         mix = self.img_mix
