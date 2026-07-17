@@ -93,21 +93,36 @@ class SegmentEditor:
         self.set_focus(focus)
 
     def set_focus(self, focus):
+        [fI0, fJ0, fK0] = self.focus # old focus
         self.focus = np.array(focus)
         [fI, fJ, fK] = self.focus
-        self.message(f"Focus set to {self.focus}.")
-        self.layer.update_image(
-            labels=self.labels[fI, :, :],
-            intensities=self.intensities[fI, :, :],
-        )
-        self.view1.update_image(
-            labels=self.labels[:, fJ, :],
-            intensities=self.intensities[:, fJ, :],
-        )
-        self.view2.update_image(
-            labels=self.labels[:, :, fK],
-            intensities=self.intensities[:, :, fK],
-        )
+        self.message(f"Focus set to {self.focus} from [{fI0}, {fJ0}, {fK0}].")
+        # only update the views that have changed
+        if fI != fI0:
+            self.layer.update_image(
+                labels=self.labels[fI, :, :],
+                intensities=self.intensities[fI, :, :],
+            )
+        if fJ != fJ0:
+            self.view1.update_image(
+                labels=self.labels[:, fJ, :],
+                intensities=self.intensities[:, fJ, :],
+            )
+        if fK != fK0:
+            self.view2.update_image(
+                labels=self.labels[:, :, fK],
+                intensities=self.intensities[:, :, fK],
+            )
+
+    def commit_labels_layer(self, labels, index=0):
+        [fI, fJ, fK] = self.focus
+        if index == 0:
+            self.labels[fI, :, :] = labels
+        elif index == 1:
+            self.labels[:, fJ, :] = labels
+        elif index == 2:
+            self.labels[:, :, fK] = labels
+        self.message(f"Committed changes to layer {index} at focus {self.focus}.")
 
     def label_colors(self):
         return self.layer.label_colors
