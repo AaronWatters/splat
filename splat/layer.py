@@ -12,8 +12,14 @@ from . import layer_interaction
 
 class Layer:
 
-    def __init__(self, labels, intensities, commit_callback=None, width=None, height=None, max_label=None):
-        print("Layer.__init__")
+    """
+    A Layer represents a single slice of a volume, with an intensity array and a label array.
+    The label array can be edited with various interaction modes, and the history of 
+    changes is stored
+    """
+
+    def __init__(self, labels, intensities, editor=None, width=None, height=None, max_label=None):
+        print("Layer.__init__", width, height, labels.shape, intensities.shape)
         self.original_labels = labels
         self.current_labels = labels.copy()
         if max_label is None:
@@ -37,7 +43,7 @@ class Layer:
         label_colors = color_list.get_colors(self.max_label)
         self.label_colors = np.array([(0,0,0)] + list(label_colors), dtype=int)
         self.intensities = intensities
-        self.commit_callback = commit_callback
+        self.editor = editor
         self.undo_labels_history = []
         if height is None:
             if width is None:
@@ -89,17 +95,28 @@ class Layer:
         self.info.text(f"Undo performed. History length: {len(self.undo_labels_history)}")
 
     def revert(self, *ignored):
+        self.undo_labels_history = []
         labels = self.original_labels
         intensities = self.intensities
         self.change_arrays(labels, intensities)
+        if self.editor is not None:
+            self.editor.message("Changes reverted to original labels.")
 
     def commit(self, *ignored):
         labels = self.current_labels
         intensities = self.intensities
-        if self.commit_callback is not None:
-            self.commit_callback(self.current_labels)
+        if self.editor is not None:
+            self.editor.commit_labels_layer(self.current_labels)
+        self.undo_labels_history = []
         self.change_arrays(labels, intensities)
         self.info.text("Changes committed.")
+
+    def modified(self):
+        return len(self.undo_labels_history) > 0
+    
+    def locate_at(self, ij):
+        [i, j] = ij
+        self.editor.change_layer(i, j, 0)
 
     def interaction_click(self, *ignored):
         [mode] = self.interaction_dropdown.selected_values
@@ -165,15 +182,28 @@ class Layer:
         im.on_pixel(self.move_callback, type="pointermove")
         im.on_pixel(self.leave_callback, type="pointerleave")
         im.on_pixel(self.click_callback, type="click")
+        element = im.element
+        gz.do(element.keypress(self.on_keypress), to_depth=1)
         self.select_label(self.selected_label)
         self.interaction = layer_interaction.PickInteraction(self)
+        #gz.do(im.window.alert("Layer image initialized. Use the dropdown to select interaction mode."))
         print("Layer.init_image done")
+
+    def on_keypress(self, event):
+        keyCode = event["keyCode"]
+        self.info.text(f"Key pressed: {keyCode}")
 
     def set_mix(self, *ignored):
         self.img_mix = self.mix_slider.value
         self.update_image()
 
-    def update_image(self, *ignored):
+    def update_image(self, labels=None, intensities=None):
+        if labels is not None:
+            self.original_labels = labels
+            self.current_labels = labels.copy()
+            self.undo_labels_history = []
+        if intensities is not None:
+            self.intensities = intensities
         carray = self.color_mix_array()
         self.image.change_array(carray, scale=False)
         if len(self.undo_labels_history) > 0:
@@ -186,19 +216,7 @@ class Layer:
             #self.revert_button.set_enabled(False)
 
     def color_mix_array(self):
-        mix = self.img_mix
-        mix1 = 1.0 - mix
-        carray = colorizers.colorize_array(self.current_labels, self.label_colors).astype(float)
-        iarray = self.intensities.astype(float)
-        M = iarray.max()
-        m = iarray.min()
-        if M == m:
-            iarray255 = np.zeros_like(iarray)
-        else:
-            iarray255 = (iarray - m) * (255.0 / (M - m))
-        ciarray255 = iarray255.reshape(iarray255.shape + (1,))
-        cmix = mix * carray + mix1 * ciarray255
-        return np.clip(cmix, 0.0, 255.0).astype(int)
+        return color_mix_array(self.img_mix, self.current_labels, self.label_colors, self.intensities)
 
     def set_label(self, ignored):
         value = self.label_input.value
@@ -247,6 +265,73 @@ class Layer:
         self.current_labels = replace_from_point(self.current_labels, start_point=start_point, to_value=to_value)
         self.update_image()
 
+class LayerView:
+    """
+    A non-editable view of a Layer, for display purposes.
+    """
+
+    def __init__(self, labels, intensities, editor, index=1, width=None, height=None):
+        print("LayerView.__init__", width, height, labels.shape, intensities.shape)
+        self.labels = labels
+        self.intensities = intensities
+        self.editor = editor
+        self.index = index
+        self.width = width
+        self.height = height
+        self.img = gz.Image(array=self.intensities, width=width, height=height, scale=True)
+        self.info = gz.Text(f"LayerView index {index}")
+        self.dash = gz.Stack([self.info, self.img])
+        self.dash.call_when_started(self.init_image)
+        self.tracking = False
+
+    def init_image(self):
+        im = self.img
+        im.css({"image-rendering": "pixelated"})
+        gz.do(im.element.attr("draggable", False))
+        im.on_pixel(self.click_callback, type="click")
+        im.on_pixel(self.move_callback, type="pointermove")
+        im.on_pixel(self.start_tracking, type="pointerdown")
+        im.on_pixel(self.stop_tracking, type="pointerup")
+        im.on_pixel(self.stop_tracking, type="pointerleave")
+        self.update_image()
+
+    def start_tracking(self, event):
+        self.tracking = True
+        self.info.text(f"LayerView index {self.index} tracking started.")
+        self.img.css({"cursor": "crosshair"})
+        [i, j] = [event["pixel_row"], event["pixel_column"]]
+        self.editor.change_layer(i, j, self.index)
+
+    def stop_tracking(self, event):
+        self.tracking = False
+        self.info.text(f"LayerView index {self.index} tracking stopped.")
+        self.img.css({"cursor": "default"})
+
+    def move_callback(self, event):
+        [i, j] = [event["pixel_row"], event["pixel_column"]]
+        value = self.labels[i, j]
+        self.info.text(f"LayerView index {self.index} mouse move at {i}, {j}, value: {value}")
+        if self.tracking:
+            self.editor.change_layer(i, j, self.index)
+
+    def click_callback(self, event):
+        [i, j] = [event["pixel_row"], event["pixel_column"]]
+        self.info.text(f"LayerView index {self.index} clicked.")
+        self.editor.change_layer(i, j, self.index)
+
+    def message(self, text):
+        self.info.text(text)
+
+    def update_image(self, labels=None, intensities=None):
+        if labels is not None:
+            self.labels = labels
+        if intensities is not None:
+            self.intensities = intensities
+        mix = self.editor.mix_level()
+        label_colors = self.editor.label_colors()
+        carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
+        self.img.change_array(carray, scale=False)
+
 
 def fill_from_point(array, start_point=None, to_target=255):
     if start_point is None:
@@ -281,3 +366,17 @@ def replace_from_point(array, start_point=None, to_value=255):
                 if 0 <= ni < replaced.shape[0] and 0 <= nj < replaced.shape[1]:
                     to_replace.append((ni, nj))
     return replaced
+
+def color_mix_array(mix, current_labels, label_colors, intensities):
+    mix1 = 1.0 - mix
+    carray = colorizers.colorize_array(current_labels, label_colors).astype(float)
+    iarray = intensities.astype(float)
+    M = iarray.max()
+    m = iarray.min()
+    if M == m:
+        iarray255 = np.zeros_like(iarray)
+    else:
+        iarray255 = (iarray - m) * (255.0 / (M - m))
+    ciarray255 = iarray255.reshape(iarray255.shape + (1,))
+    cmix = mix * carray + mix1 * ciarray255
+    return np.clip(cmix, 0.0, 255.0).astype(int)

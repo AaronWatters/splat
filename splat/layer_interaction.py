@@ -23,6 +23,7 @@ class PickInteraction:
     def on_click(self, event):
         # pick the label at the clicked pixel
         ij = self.location(event)
+        self.layer.locate_at(ij)
         label = self.layer.current_labels[ij]
         self.layer.info.text(f"Picked label {label} at {ij}")
         #pr(f"Picked label {label} at {ij}")
