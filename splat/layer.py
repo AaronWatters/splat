@@ -22,6 +22,7 @@ class Layer:
         print("Layer.__init__", width, height, labels.shape, intensities.shape)
         self.original_labels = labels
         self.current_labels = labels.copy()
+        shape = np.array(labels.shape)
         if max_label is None:
             self.max_label = int(labels.max())
         else:
@@ -49,9 +50,9 @@ class Layer:
             if width is None:
                 height, width = labels.shape
             else:
-                height = int(labels.shape[0] * (width / labels.shape[1]))
+                height = int(shape[0] * (width / shape[1]))
         elif width is None:
-            width = int(labels.shape[1] * (height / labels.shape[0]))
+            width = int(shape[1] * (height / shape[0]))
         self.mix_slider.css(width=width)
         self.image = gz.Image(array=self.intensities, width=width, height=height, scale=True)
         self.info = gz.Text("Layer info")
@@ -78,6 +79,8 @@ class Layer:
                 self.commit_button,
             ]
             ])
+        self.focus = shape // 2
+        self._modified = False
         self.dash.call_when_started(self.init_image)
         print ("Layer.__init__ done")
 
@@ -96,6 +99,7 @@ class Layer:
 
     def revert(self, *ignored):
         self.undo_labels_history = []
+        self._modified = False
         labels = self.original_labels
         intensities = self.intensities
         self.change_arrays(labels, intensities)
@@ -110,9 +114,11 @@ class Layer:
         self.undo_labels_history = []
         self.change_arrays(labels, intensities)
         self.info.text("Changes committed.")
+        self.locate_at(self.focus) # update images.
+        self._modified = False
 
     def modified(self):
-        return len(self.undo_labels_history) > 0
+        return self._modified or len(self.undo_labels_history) > 0
     
     def locate_at(self, ij):
         [i, j] = ij
@@ -149,10 +155,12 @@ class Layer:
         self.current_labels = labels.copy()
         self.intensities = intensities
         self.undo_labels_history = []
+        self._modified = False
         self.update_image()
 
     def set_pixel(self, ij):
         self.current_labels[ij] = self.selected_label
+        self._modified = True
 
     def connect_pixels(self, ij1, ij2):
         # draw a line between two pixels and set the label along the line
@@ -169,6 +177,7 @@ class Layer:
             x = int(round(x1 + t * dx))
             y = int(round(y1 + t * dy))
             self.set_pixel((y, x))
+        self._modified = True
 
     def init_image(self):
         print("Layer.init_image")
@@ -183,21 +192,25 @@ class Layer:
         im.on_pixel(self.leave_callback, type="pointerleave")
         im.on_pixel(self.click_callback, type="click")
         element = im.element
-        gz.do(element.keypress(self.on_keypress), to_depth=1)
+        gz.do(element.keypress(self.on_keypress), to_depth=1) # doesn't work yet.
         self.select_label(self.selected_label)
         self.interaction = layer_interaction.PickInteraction(self)
         #gz.do(im.window.alert("Layer image initialized. Use the dropdown to select interaction mode."))
         print("Layer.init_image done")
 
-    def on_keypress(self, event):
+    def on_keypress(self, event): # xxxx doesn't work yet.
         keyCode = event["keyCode"]
         self.info.text(f"Key pressed: {keyCode}")
 
     def set_mix(self, *ignored):
         self.img_mix = self.mix_slider.value
-        self.update_image()
+        #self.update_image()
+        # update all views
+        self.locate_at(self.focus)
 
-    def update_image(self, labels=None, intensities=None):
+    def update_image(self, labels=None, intensities=None, focus=None):
+        if focus is not None:
+            self.focus = np.array(focus, dtype=int)
         if labels is not None:
             self.original_labels = labels
             self.current_labels = labels.copy()
@@ -205,6 +218,8 @@ class Layer:
         if intensities is not None:
             self.intensities = intensities
         carray = self.color_mix_array()
+        #print("edit layer marking at focus", self.focus)
+        xmark(carray, self.focus)
         self.image.change_array(carray, scale=False)
         if len(self.undo_labels_history) > 0:
             self.undo_button.set_enabled(True)
@@ -283,6 +298,7 @@ class LayerView:
         self.dash = gz.Stack([self.info, self.img])
         self.dash.call_when_started(self.init_image)
         self.tracking = False
+        self.focus = np.array(labels.shape) // 2
 
     def init_image(self):
         im = self.img
@@ -322,7 +338,9 @@ class LayerView:
     def message(self, text):
         self.info.text(text)
 
-    def update_image(self, labels=None, intensities=None):
+    def update_image(self, labels=None, intensities=None, focus=None):
+        if focus is not None:
+            self.focus = np.array(focus, dtype=int)
         if labels is not None:
             self.labels = labels
         if intensities is not None:
@@ -330,6 +348,7 @@ class LayerView:
         mix = self.editor.mix_level()
         label_colors = self.editor.label_colors()
         carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
+        xmark(carray, self.focus)
         self.img.change_array(carray, scale=False)
 
 
@@ -380,3 +399,18 @@ def color_mix_array(mix, current_labels, label_colors, intensities):
     ciarray255 = iarray255.reshape(iarray255.shape + (1,))
     cmix = mix * carray + mix1 * ciarray255
     return np.clip(cmix, 0.0, 255.0).astype(int)
+
+def xmark(array, focus, size=5):
+    """
+    Draw an X mark at the focus point in the array with a whole in the middle.
+    """
+    i, j = focus
+    h, w = array.shape[:2]
+    whiten = np.array([255, 255, 255], dtype=int) // 2
+    for di in range(-size, size + 1):
+        for dj in range(-size, size + 1):
+            if abs(di) == abs(dj) and (di != 0 or dj != 0):
+                ni = i + di
+                nj = j + dj
+                if 0 <= ni < h and 0 <= nj < w:
+                    array[ni, nj] = array[ni, nj] // 2 + whiten

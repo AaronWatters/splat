@@ -2,23 +2,51 @@
 Interaction mode for layers -- determines interpretation of mouse events and how layers respond to them.
 """
 
-class PickInteraction:
+class NullInteraction:
     """
-    Interaction mode for picking labels in a layer.
+    Interaction mode for doing nothing.
     """
+
     def __init__(self, layer):
         self.layer = layer
 
     def on_pointerdown(self, event):
-        pass # ignore pointer down events in pick mode
+        pass
 
     def on_pointerup(self, event):
+        pass
+
+    def on_pointermove(self, event):
+        pass
+
+    def location(self, event):
+        # return the pixel location of the event
+        return (event["pixel_row"], event["pixel_column"])
+
+class PickInteraction(NullInteraction):
+    """
+    Interaction mode for picking labels in a layer.
+    """
+
+    tracking = False
+
+    def __init__(self, layer):
+        self.layer = layer
+
+    def on_pointerdown(self, event):
+        self.tracking = True
+        return self.on_pointermove(event)
+
+    def on_pointerup(self, event):
+        self.tracking = False
         pass # ignore pointer up events in pick mode
 
     def on_pointermove(self, event):
+        if not self.tracking:
+            return
         ij = self.location(event)
         label = self.layer.current_labels[ij]
-        self.layer.info.text(f"Mouse move at {ij} : label {label}")
+        return self.on_click(event)
 
     def on_click(self, event):
         # pick the label at the clicked pixel
@@ -28,12 +56,8 @@ class PickInteraction:
         self.layer.info.text(f"Picked label {label} at {ij}")
         #pr(f"Picked label {label} at {ij}")
         self.layer.select_label(label)
-
-    def location(self, event):
-        # return the pixel location of the event
-        return (event["pixel_row"], event["pixel_column"])
     
-class ScribbleInteraction(PickInteraction):
+class ScribbleInteraction(NullInteraction):
     """
     Interaction mode for scribbling on a layer.
     """
@@ -100,7 +124,7 @@ class LassoInteraction(ScribbleInteraction):
     """
     close_loop = True
 
-class FillInteraction(PickInteraction):
+class FillInteraction(NullInteraction):
     """
     Interaction mode for filling a region in a layer.
     """
@@ -112,7 +136,7 @@ class FillInteraction(PickInteraction):
         self.layer.fill_from(ij, label)
         self.layer.set_mode("pick") # switch back to pick mode after filling
 
-class ReplaceInteraction(PickInteraction):
+class ReplaceInteraction(NullInteraction):
     """
     Interaction mode for replacing a label in a layer.
     """

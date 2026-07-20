@@ -102,17 +102,26 @@ class SegmentEditor:
             self.layer.update_image(
                 labels=self.labels[fI, :, :],
                 intensities=self.intensities[fI, :, :],
+                focus=[fJ, fK],
             )
+        else:
+            self.layer.update_image(focus=[fJ, fK])
         if fJ != fJ0:
             self.view1.update_image(
                 labels=self.labels[:, fJ, :],
                 intensities=self.intensities[:, fJ, :],
+                focus=[fI, fK]
             )
+        else:
+            self.view1.update_image(focus=[fI, fK])
         if fK != fK0:
             self.view2.update_image(
                 labels=self.labels[:, :, fK],
                 intensities=self.intensities[:, :, fK],
+                focus=[fI, fJ]
             )
+        else:
+            self.view2.update_image(focus=[fI, fJ])
 
     def commit_labels_layer(self, labels, index=0):
         [fI, fJ, fK] = self.focus
