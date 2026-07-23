@@ -146,6 +146,7 @@ class Layer:
         #log = self.interaction_dropdown.window.console.log
         sel = self.interaction_dropdown.select
         gz.do(sel.val(mode_id).selectmenu("refresh").trigger("change"))
+        #gz.do(self.interaction_dropdown.element.open())
         #gz.do(log("selected value:", sel.val()))
         #gz.do(log("selected text:", sel.find("option:selected").text()))
         print("id 2 value", self.interaction_dropdown.id2value)
@@ -191,16 +192,27 @@ class Layer:
         im.on_pixel(self.move_callback, type="pointermove")
         im.on_pixel(self.leave_callback, type="pointerleave")
         im.on_pixel(self.click_callback, type="click")
-        element = im.element
-        gz.do(element.keypress(self.on_keypress), to_depth=1) # doesn't work yet.
+        element = self.dash.element
+        gz.do(element.keydown(self.on_keypress), to_depth=1) # doesn't work yet.
+        gz.do(element.attr("tabindex", 0)) # make it focusable
         self.select_label(self.selected_label)
         self.interaction = layer_interaction.PickInteraction(self)
         #gz.do(im.window.alert("Layer image initialized. Use the dropdown to select interaction mode."))
         print("Layer.init_image done")
 
-    def on_keypress(self, event): # xxxx doesn't work yet.
+    def on_keypress(self, event):
         keyCode = event["keyCode"]
-        self.info.text(f"Key pressed: {keyCode}")
+        char = chr(keyCode).upper()
+        mode = None
+        for _mode in self.interaction_modes:
+            if char == _mode[0].upper():
+                mode = _mode
+                break
+        if mode is not None:
+            self.set_mode(mode)
+            self.info.text(f"Key pressed: {keyCode} ({char}), mode set to {mode}")
+        else:
+            self.info.text(f"Key pressed: {keyCode} ({char}), no mode change.")
 
     def set_mix(self, *ignored):
         self.img_mix = self.mix_slider.value
@@ -266,6 +278,8 @@ class Layer:
     
     def move_callback(self, event):
         self.info.text(f"Mouse move at {event['pixel_row']}, {event['pixel_column']}")
+        # focus on the dash so that keypress events are captured
+        gz.do(self.dash.element.focus())
         return self.interaction.on_pointermove(event)
     
     def click_callback(self, event):
