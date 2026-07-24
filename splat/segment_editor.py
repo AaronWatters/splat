@@ -5,11 +5,13 @@ Edit volume segmentation labels.
 
 import numpy as np
 import H5Gizmos as gz
+from numpy.strings import index
 from . import layer
 
 class SegmentEditor:
     
     def __init__(self, labels, intensities, width=500):
+        self.layer_offset = 0
         self.labels = labels
         self.intensities = intensities
         self.focus = np.array(labels.shape) // 2
@@ -24,8 +26,8 @@ class SegmentEditor:
             on_change=self.slide_layer)
         self.layer_slider.css({"height": f"{width}px"})
         self.layer = layer.Layer(
-            labels[fI, :, :], 
-            intensities[fI, :, :],
+            self.get_labels(0), #labels[fI, :, :],
+            self.get_intensities(0), #intensities[fI, :, :],
             editor=self,
             width=int(zoom * K), 
             height=int(zoom * J), 
@@ -57,6 +59,48 @@ class SegmentEditor:
             ]
         ])
 
+    def layer_index(self, position, focus_indices):
+        position = position % 3
+        indexer = [slice(None), slice(None), slice(None)]
+        indexer[position] = focus_indices[position]
+        return tuple(indexer)
+
+    def focus2d0(self, position):
+        pos = self.pos(position)
+        list_focus = list(self.focus)
+        del list_focus[pos]
+        return tuple(list_focus)
+
+    def focus2d(self, position):
+        focus = self.focus
+        [A, B] = sorted([self.pos(position + 1), self.pos(position + 2)])
+        result = (focus[A], focus[B])
+        #print(f"focus2d: position {position}, AB {A}, {B}, input focus {focus}, output focus {result}")
+        return result
+
+    def pos(self, base_position):
+        return (base_position + self.layer_offset) % 3
+
+    def set_layer_offset(self, offset):
+        pos = self.pos(offset)
+        self.layer_offset = pos
+        self.set_focus(self.focus) # update the views with the new offset
+
+    def get_layer(self, from_array, position):
+        focus = self.focus
+        indexer = self.layer_index(self.pos(position), focus)
+        result = from_array[indexer]
+        #print(f"get_layer: position {position}, input shape {from_array.shape},"
+        #      f" offset {self.layer_offset}, focus {focus}, indexer {indexer},"
+        #      f" result shape {result.shape}")
+        return result
+
+    def get_intensities(self, position):
+        return self.get_layer(self.intensities, position)
+
+    def get_labels(self, position):
+        return self.get_layer(self.labels, position)
+
     def warning(self, text):
         self.info.text(text)
         self.info.css({"background-color": "yellow", "color": "red", "font-weight": "bold"})
@@ -67,6 +111,18 @@ class SegmentEditor:
 
     def slide_layer(self, *ignored):
         layerI = int(self.layer_slider.value)
+        focus = self.focus
+        pos0 = self.pos(0)
+        current_layer_index = focus[pos0]
+        if self.layer.modified() and layerI != current_layer_index:
+            self.warning("Commit or revert changes before leaving the current layer.")
+            self.layer_slider.set_value(current_layer_index)
+            return
+        focus[pos0] = layerI
+        self.set_focus(focus)
+
+    def slide_layer0(self, *ignored): # remove this method after testing
+        layerI = int(self.layer_slider.value)
         [fI, fJ, fK] = self.focus
         if self.layer.modified() and layerI != fI:
             self.warning("Commit or revert changes before leaving the current layer.")
@@ -75,8 +131,9 @@ class SegmentEditor:
         self.change_layer(layerI, fJ, 1)
         self.message(f"Slide layer from {fI} to {layerI}.")
 
-    def change_layer(self, A, B, index):
-        if index > 0:
+    def change_layer0(self, A, B, base_index): # remove this method after testing
+        index = self.pos(base_index)
+        if base_index > 0:
             if self.layer.modified():
                 self.warning("Commit or revert changes before leaving the current layer.")
                 return
@@ -92,7 +149,35 @@ class SegmentEditor:
             focus[1] = B
         self.set_focus(focus)
 
-    def set_focus(self, focus):
+    def change_layer(self, A, B, base_index):
+        #index = self.pos(base_index)
+        if base_index > 0:
+            if self.layer.modified():
+                self.warning("Commit or revert changes before leaving the current layer.")
+                return
+        focus = self.focus.copy()
+        [Ai, Bi] = sorted([self.pos(base_index + 1), self.pos(base_index + 2)])
+        focus[Ai] = A
+        focus[Bi] = B
+        self.set_focus(focus)
+
+    def set_focus(self, focus): # remove this method after testing
+        [fI0, fJ0, fK0] = self.focus # old focus
+        self.focus = np.array(focus)
+        [fI, fJ, fK] = self.focus
+        self.message(f"Focus set to {self.focus} from [{fI0}, {fJ0}, {fK0}].")
+        for (position, layer) in [(0, self.layer), (1, self.view1), (2, self.view2)]:
+            pos = self.pos(position)
+            indexer = self.layer_index(pos, self.focus)
+            layer.update_image(
+                labels=self.labels[indexer],
+                intensities=self.intensities[indexer],
+                focus=self.focus2d(position),
+            )
+        # set the slider value to position 0 of the new focus
+        self.layer_slider.set_value(self.focus[self.pos(0)])
+
+    def set_focus0(self, focus): # remove this method after testing
         [fI0, fJ0, fK0] = self.focus # old focus
         self.focus = np.array(focus)
         [fI, fJ, fK] = self.focus
@@ -123,7 +208,7 @@ class SegmentEditor:
         else:
             self.view2.update_image(focus=[fI, fJ])
 
-    def commit_labels_layer(self, labels, index=0):
+    def commit_labels_layer0(self, labels, index=0): # historical
         [fI, fJ, fK] = self.focus
         if index == 0:
             self.labels[fI, :, :] = labels
@@ -132,6 +217,11 @@ class SegmentEditor:
         elif index == 2:
             self.labels[:, :, fK] = labels
         self.message(f"Committed changes to layer {index} at focus {self.focus}.")
+
+    def commit_labels_layer(self, labels, index=0):
+        focus = self.focus
+        indexer = self.layer_index(self.pos(index), focus)
+        self.labels[indexer] = labels
 
     def label_colors(self):
         return self.layer.label_colors

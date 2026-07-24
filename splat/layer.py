@@ -149,7 +149,7 @@ class Layer:
         #gz.do(self.interaction_dropdown.element.open())
         #gz.do(log("selected value:", sel.val()))
         #gz.do(log("selected text:", sel.find("option:selected").text()))
-        print("id 2 value", self.interaction_dropdown.id2value)
+        #print("id 2 value", self.interaction_dropdown.id2value)
 
     def change_arrays(self, labels, intensities):
         self.original_labels = labels
@@ -181,7 +181,7 @@ class Layer:
         self._modified = True
 
     def init_image(self):
-        print("Layer.init_image")
+        #print("Layer.init_image")
         #return
         im = self.image
         im.css({"image-rendering": "pixelated"})
@@ -193,12 +193,12 @@ class Layer:
         im.on_pixel(self.leave_callback, type="pointerleave")
         im.on_pixel(self.click_callback, type="click")
         element = self.dash.element
-        gz.do(element.keydown(self.on_keypress), to_depth=1) # doesn't work yet.
+        gz.do(element.keydown(self.on_keypress), to_depth=1)
         gz.do(element.attr("tabindex", 0)) # make it focusable
         self.select_label(self.selected_label)
         self.interaction = layer_interaction.PickInteraction(self)
         #gz.do(im.window.alert("Layer image initialized. Use the dropdown to select interaction mode."))
-        print("Layer.init_image done")
+        #print("Layer.init_image done")
 
     def on_keypress(self, event):
         keyCode = event["keyCode"]
@@ -309,10 +309,21 @@ class LayerView:
         self.height = height
         self.img = gz.Image(array=self.intensities, width=width, height=height, scale=True)
         self.info = gz.Text(f"LayerView index {index}")
-        self.dash = gz.Stack([self.info, self.img])
+        self.focus_button = gz.Button("Focus here", on_click=self.focus_here)
+        self.dash = gz.Stack([self.info, self.img, self.focus_button])
         self.dash.call_when_started(self.init_image)
         self.tracking = False
         self.focus = np.array(labels.shape) // 2
+
+    def pos(self):
+        index = self.index
+        editor = self.editor
+        if editor is None:
+            return index
+        return editor.pos(index)
+
+    def focus_here(self, *ignored):
+        self.editor.set_layer_offset(self.index)
 
     def init_image(self):
         im = self.img
@@ -327,26 +338,26 @@ class LayerView:
 
     def start_tracking(self, event):
         self.tracking = True
-        self.info.text(f"LayerView index {self.index} tracking started.")
+        self.info.text(f"LayerView index {self.pos()} tracking started.")
         self.img.css({"cursor": "crosshair"})
         [i, j] = [event["pixel_row"], event["pixel_column"]]
         self.editor.change_layer(i, j, self.index)
 
     def stop_tracking(self, event):
         self.tracking = False
-        self.info.text(f"LayerView index {self.index} tracking stopped.")
+        self.info.text(f"LayerView index {self.pos()} tracking stopped.")
         self.img.css({"cursor": "default"})
 
     def move_callback(self, event):
         [i, j] = [event["pixel_row"], event["pixel_column"]]
         value = self.labels[i, j]
-        self.info.text(f"LayerView index {self.index} mouse move at {i}, {j}, value: {value}")
+        self.info.text(f"LayerView index {self.pos()} mouse move at {i}, {j}, value: {value}")
         if self.tracking:
             self.editor.change_layer(i, j, self.index)
 
     def click_callback(self, event):
         [i, j] = [event["pixel_row"], event["pixel_column"]]
-        self.info.text(f"LayerView index {self.index} clicked.")
+        self.info.text(f"LayerView index {self.pos()} clicked.")
         self.editor.change_layer(i, j, self.index)
 
     def message(self, text):
