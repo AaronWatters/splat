@@ -162,18 +162,24 @@ class SegmentEditor:
         self.set_focus(focus)
 
     def set_focus(self, focus): # remove this method after testing
-        [fI0, fJ0, fK0] = self.focus # old focus
+        old_focus = self.focus # old focus
         self.focus = np.array(focus)
-        [fI, fJ, fK] = self.focus
-        self.message(f"Focus set to {self.focus} from [{fI0}, {fJ0}, {fK0}].")
+        #[fI, fJ, fK] = self.focus
+        self.message(f"Focus set to {self.focus} from {old_focus}.")
         for (position, layer) in [(0, self.layer), (1, self.view1), (2, self.view2)]:
             pos = self.pos(position)
-            indexer = self.layer_index(pos, self.focus)
-            layer.update_image(
-                labels=self.labels[indexer],
-                intensities=self.intensities[indexer],
-                focus=self.focus2d(position),
-            )
+            new_value = self.focus[pos]
+            old_value = old_focus[pos]
+            focus2d = self.focus2d(position)
+            if new_value != old_value or position != 0:
+                indexer = self.layer_index(pos, self.focus)
+                layer.update_image(
+                    labels=self.labels[indexer],
+                    intensities=self.intensities[indexer],
+                    focus=focus2d,
+                )
+            else:
+                layer.update_image(focus=focus2d)
         # set the slider value to position 0 of the new focus
         self.layer_slider.set_value(self.focus[self.pos(0)])
 

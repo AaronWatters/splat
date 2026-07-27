@@ -122,6 +122,7 @@ class Layer:
     
     def locate_at(self, ij):
         [i, j] = ij
+        self.focus = np.array(ij, dtype=int)
         self.editor.change_layer(i, j, 0)
 
     def interaction_click(self, *ignored):
