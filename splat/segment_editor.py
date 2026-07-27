@@ -111,13 +111,18 @@ class SegmentEditor:
 
     def slide_layer(self, *ignored):
         layerI = int(self.layer_slider.value)
-        focus = self.focus
+        focus = self.focus.copy()
         pos0 = self.pos(0)
+        #print (f"slide_layer: layerI {layerI}, focus {focus}, pos0 {pos0}")
         current_layer_index = focus[pos0]
         if self.layer.modified() and layerI != current_layer_index:
             self.warning("Commit or revert changes before leaving the current layer.")
             self.layer_slider.set_value(current_layer_index)
             return
+        if layerI == current_layer_index:
+            #self.message(f"Slide layer to {layerI} (no change).")
+            return
+        #self.message(f"Slide layer from {current_layer_index} to {layerI}.")
         focus[pos0] = layerI
         self.set_focus(focus)
 
