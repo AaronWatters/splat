@@ -382,6 +382,35 @@ class LayerView:
         self.img.change_array(carray, scale=False)
 
 
+class ZoomView(LayerView):
+    """
+    A zoomed view of a Layer, for display purposes.
+    """
+
+    def get_dash(self):
+        self.img = gz.Image(array=self.intensities, width=self.width, height=self.height, scale=True)
+        self.info = gz.Text(f"ZoomView index {self.index}")
+        self.dash = gz.Stack([self.info, self.img])
+        return self.dash
+
+    def move_callback(self, event):
+        # do nothing for now
+        pass
+
+    def click_callback(self, event):
+        # do nothing for now
+        pass
+
+    def update_image(self, labels=None, intensities=None, focus=None):
+        if labels is not None:
+            self.labels = labels
+        if intensities is not None:
+            self.intensities = intensities
+        mix = self.editor.mix_level()
+        label_colors = self.editor.label_colors()
+        carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
+        self.img.change_array(carray, scale=False)
+
 def fill_from_point(array, start_point=None, to_target=255):
     if start_point is None:
         start_point = (array.shape[0] // 2, array.shape[1] // 2)
