@@ -28,7 +28,7 @@ class SegmentEditor:
         self.labels = labels
         self.intensities = intensities
         (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
-        self.focus = np.array(labels.shape) // 2
+        self.focus = (np.array(labels.shape) / self.scaling / 2).astype(int)
         shape = np.array(labels.shape)
         [I, J, K] = labels.shape
         zoom = max(1.0, width / shape.max())
@@ -46,17 +46,25 @@ class SegmentEditor:
             width=int(zoom * K), 
             height=int(zoom * J), 
             max_label=self.maxlabel)
+        self.zoom = layer.ZoomView(
+            self.get_zoomed_labels(0), #labels[fI, :, :],
+            self.get_zoomed_intensities(0), #intensities[fI, :, :],
+            editor=self,
+            width=width,
+            height=width,
+            index=0,
+        )
         self.view1 = layer.LayerView(
-            labels[:, fJ, :],
-            intensities[:, fJ, :],
+            self.get_labels(1), #labels[:, fJ, :],
+            self.get_intensities(1), #intensities[:, fJ, :],
             width=int(zoom * K),
             height=int(zoom * I),
             editor=self,
             index=1,
         )
         self.view2 = layer.LayerView(
-            labels[:, :, fK],
-            intensities[:, :, fK],
+            self.get_labels(2), #labels[:, :, fK],
+            self.get_intensities(2), #intensities[:, :, fK],
             width=int(zoom * J),
             height=int(zoom * I),
             editor=self,
@@ -65,12 +73,14 @@ class SegmentEditor:
         self.info = gz.Text("Click on a view to change the focus slice. Use the layer view to edit labels.")
         self.dash = gz.Shelf([
             self.layer_slider,
-            self.layer.dash,
+            [
+                self.layer.dash,
+                self.zoom.dash,
+            ],
             [
                 self.info,
                 self.view1.dash,
-                self.view2.dash,
-            ]
+                self.view2.dash,            ]
         ])
 
     def sliced_arrays(self):
@@ -90,7 +100,7 @@ class SegmentEditor:
         [A, B] = sorted([self.pos(position + 1), self.pos(position + 2)])
         return (A, B)
 
-    def zoom(self, position, from_array):
+    def zoom_array(self, position, from_array):
         """
         fit layer view from from_array so maximum dimension fits in self.width
         """
@@ -132,10 +142,10 @@ class SegmentEditor:
         return self.get_layer(self.sliced_labels, position)
 
     def get_zoomed_intensities(self, position):
-        return self.zoom(position, self.intensities)
+        return self.zoom_array(position, self.intensities)
 
     def get_zoomed_labels(self, position):
-        return self.zoom(position, self.labels)
+        return self.zoom_array(position, self.labels)
 
     def warning(self, text):
         self.info.text(text)
@@ -178,28 +188,39 @@ class SegmentEditor:
         old_focus = self.focus # old focus
         self.focus = np.array(focus)
         #[fI, fJ, fK] = self.focus
+        modified = self.layer.modified()
         self.message(f"Focus set to {self.focus} from {old_focus}.")
         for (position, layer) in [(0, self.layer), (1, self.view1), (2, self.view2)]:
             pos = self.pos(position)
             new_value = self.focus[pos]
             old_value = old_focus[pos]
             focus2d = self.focus2d(position)
-            if new_value != old_value or position != 0:
+            if (not modified)or new_value != old_value or position != 0:
                 indexer = self.layer_index(pos, self.focus)
                 layer.update_image(
-                    labels=self.labels[indexer],
-                    intensities=self.intensities[indexer],
+                    labels=self.get_labels(position),
+                    intensities=self.get_intensities(position),
                     focus=focus2d,
                 )
+                if position == 0:
+                    self.zoom.update_image(
+                        labels=self.get_zoomed_labels(0),
+                        intensities=self.get_zoomed_intensities(0),
+                        focus=focus2d,
+                    )
             else:
                 layer.update_image(focus=focus2d)
         # set the slider value to position 0 of the new focus
         self.layer_slider.set_value(self.focus[self.pos(0)])
 
-    def commit_labels_layer(self, labels, index=0):
+    def commit_labels_layer0(self, labels, index=0):
         focus = self.focus
         indexer = self.layer_index(self.pos(index), focus)
         self.labels[indexer] = labels
+
+    def commit_labels_layer(self, labels, index=0):
+        labels_view = self.get_labels(index)
+        labels_view[:] = labels
 
     def label_colors(self):
         return self.layer.label_colors
