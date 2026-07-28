@@ -7,13 +7,27 @@ import numpy as np
 import H5Gizmos as gz
 from numpy.strings import index
 from . import layer
+from scipy.ndimage import zoom
+
+MIN_LABELS = 10
 
 class SegmentEditor:
     
-    def __init__(self, labels, intensities, width=500):
+    def __init__(self, intensities, labels=None, scaling=(1,1,1), width=500):
+        self.width = width
         self.layer_offset = 0
+        self.scaling = np.array(scaling, dtype=float)
+        self.voxels_per_width = (width / self.scaling).astype(int)
+        self.corner_index = np.array([0, 0, 0], dtype=int)
+        if labels is None:
+            labels = np.zeros_like(intensities, dtype=np.int32)
+            maxlabel = MIN_LABELS
+        else:
+            maxlabel = max(labels.max(), MIN_LABELS)
+        self.maxlabel = maxlabel
         self.labels = labels
         self.intensities = intensities
+        (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
         self.focus = np.array(labels.shape) // 2
         shape = np.array(labels.shape)
         [I, J, K] = labels.shape
@@ -31,7 +45,7 @@ class SegmentEditor:
             editor=self,
             width=int(zoom * K), 
             height=int(zoom * J), 
-            max_label=labels.max())
+            max_label=self.maxlabel)
         self.view1 = layer.LayerView(
             labels[:, fJ, :],
             intensities[:, fJ, :],
@@ -59,15 +73,37 @@ class SegmentEditor:
             ]
         ])
 
+    def sliced_arrays(self):
+        (I, J, K) = self.corner_index
+        (dI, dJ, dK) = self.voxels_per_width
+        self.sliced_labels = self.labels[I:I+dI, J:J+dJ, K:K+dK]
+        self.sliced_intensities = self.intensities[I:I+dI, J:J+dJ, K:K+dK]
+        return (self.sliced_labels, self.sliced_intensities)
+
     def layer_index(self, position, focus_indices):
         position = position % 3
         indexer = [slice(None), slice(None), slice(None)]
         indexer[position] = focus_indices[position]
         return tuple(indexer)
 
+    def view_indices(self, position):
+        [A, B] = sorted([self.pos(position + 1), self.pos(position + 2)])
+        return (A, B)
+
+    def zoom(self, position, from_array):
+        """
+        fit layer view from from_array so maximum dimension fits in self.width
+        """
+        width = self.width
+        layer = self.get_layer(from_array, position)
+        shape = np.array(layer.shape)
+        zoomfactor = width / shape.max()
+        zoomed = zoom(layer, zoomfactor, order=0)
+        return zoomed
+
     def focus2d(self, position):
         focus = self.focus
-        [A, B] = sorted([self.pos(position + 1), self.pos(position + 2)])
+        [A, B] = self.view_indices(position)
         result = (focus[A], focus[B])
         #print(f"focus2d: position {position}, AB {A}, {B}, input focus {focus}, output focus {result}")
         return result
@@ -90,10 +126,16 @@ class SegmentEditor:
         return result
 
     def get_intensities(self, position):
-        return self.get_layer(self.intensities, position)
+        return self.get_layer(self.sliced_intensities, position)
 
     def get_labels(self, position):
-        return self.get_layer(self.labels, position)
+        return self.get_layer(self.sliced_labels, position)
+
+    def get_zoomed_intensities(self, position):
+        return self.zoom(position, self.intensities)
+
+    def get_zoomed_labels(self, position):
+        return self.zoom(position, self.labels)
 
     def warning(self, text):
         self.info.text(text)
