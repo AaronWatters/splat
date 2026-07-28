@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Interactive tool for creating, viewing, and editting 3d microscopy segmentations."
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["numpy", "h5gizmos"]
+dependencies = ["numpy", "h5gizmos", "scipy"]
 
 [project.scripts]
 inspect-npy = "splat.inspect_npy:main"
