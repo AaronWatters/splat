@@ -26,7 +26,7 @@ class Layer:
         if max_label is None:
             self.max_label = int(labels.max())
         else:
-            self.max_label = max_label
+            self.max_label = int(max_label)
         self.interaction_modes = {
             "pick": layer_interaction.PickInteraction(self),
             "scribble": layer_interaction.ScribbleInteraction(self),
@@ -308,13 +308,17 @@ class LayerView:
         self.index = index
         self.width = width
         self.height = height
-        self.img = gz.Image(array=self.intensities, width=width, height=height, scale=True)
-        self.info = gz.Text(f"LayerView index {index}")
-        self.focus_button = gz.Button("Focus here", on_click=self.focus_here)
-        self.dash = gz.Stack([self.info, self.img, self.focus_button])
+        self.dash = self.get_dash()
         self.dash.call_when_started(self.init_image)
         self.tracking = False
         self.focus = np.array(labels.shape) // 2
+
+    def get_dash(self):
+        self.img = gz.Image(array=self.intensities, width=self.width, height=self.height, scale=True)
+        self.info = gz.Text(f"LayerView index {self.index}")
+        self.focus_button = gz.Button("Focus here", on_click=self.focus_here)
+        self.dash = gz.Stack([self.info, self.img, self.focus_button])
+        return self.dash
 
     def pos(self):
         index = self.index
