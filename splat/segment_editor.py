@@ -65,12 +65,6 @@ class SegmentEditor:
         indexer[position] = focus_indices[position]
         return tuple(indexer)
 
-    def focus2d0(self, position):
-        pos = self.pos(position)
-        list_focus = list(self.focus)
-        del list_focus[pos]
-        return tuple(list_focus)
-
     def focus2d(self, position):
         focus = self.focus
         [A, B] = sorted([self.pos(position + 1), self.pos(position + 2)])
@@ -126,34 +120,6 @@ class SegmentEditor:
         focus[pos0] = layerI
         self.set_focus(focus)
 
-    def slide_layer0(self, *ignored): # remove this method after testing
-        layerI = int(self.layer_slider.value)
-        [fI, fJ, fK] = self.focus
-        if self.layer.modified() and layerI != fI:
-            self.warning("Commit or revert changes before leaving the current layer.")
-            self.layer_slider.set_value(fI)
-            return
-        self.change_layer(layerI, fJ, 1)
-        self.message(f"Slide layer from {fI} to {layerI}.")
-
-    def change_layer0(self, A, B, base_index): # remove this method after testing
-        index = self.pos(base_index)
-        if base_index > 0:
-            if self.layer.modified():
-                self.warning("Commit or revert changes before leaving the current layer.")
-                return
-        focus = self.focus.copy()
-        if index == 0:
-            focus[1] = A
-            focus[2] = B
-        elif index == 1:
-            focus[0] = A
-            focus[2] = B
-        elif index == 2:
-            focus[0] = A
-            focus[1] = B
-        self.set_focus(focus)
-
     def change_layer(self, A, B, base_index):
         #index = self.pos(base_index)
         if base_index > 0:
@@ -187,47 +153,6 @@ class SegmentEditor:
                 layer.update_image(focus=focus2d)
         # set the slider value to position 0 of the new focus
         self.layer_slider.set_value(self.focus[self.pos(0)])
-
-    def set_focus0(self, focus): # remove this method after testing
-        [fI0, fJ0, fK0] = self.focus # old focus
-        self.focus = np.array(focus)
-        [fI, fJ, fK] = self.focus
-        self.message(f"Focus set to {self.focus} from [{fI0}, {fJ0}, {fK0}].")
-        # only update the views that have changed
-        if fI != fI0:
-            self.layer.update_image(
-                labels=self.labels[fI, :, :],
-                intensities=self.intensities[fI, :, :],
-                focus=[fJ, fK],
-            )
-        else:
-            self.layer.update_image(focus=[fJ, fK])
-        if fJ != fJ0:
-            self.view1.update_image(
-                labels=self.labels[:, fJ, :],
-                intensities=self.intensities[:, fJ, :],
-                focus=[fI, fK]
-            )
-        else:
-            self.view1.update_image(focus=[fI, fK])
-        if fK != fK0:
-            self.view2.update_image(
-                labels=self.labels[:, :, fK],
-                intensities=self.intensities[:, :, fK],
-                focus=[fI, fJ]
-            )
-        else:
-            self.view2.update_image(focus=[fI, fJ])
-
-    def commit_labels_layer0(self, labels, index=0): # historical
-        [fI, fJ, fK] = self.focus
-        if index == 0:
-            self.labels[fI, :, :] = labels
-        elif index == 1:
-            self.labels[:, fJ, :] = labels
-        elif index == 2:
-            self.labels[:, :, fK] = labels
-        self.message(f"Committed changes to layer {index} at focus {self.focus}.")
 
     def commit_labels_layer(self, labels, index=0):
         focus = self.focus
