@@ -14,6 +14,7 @@ MIN_LABELS = 10
 class SegmentEditor:
     
     def __init__(self, intensities, labels=None, scaling=(1,1,1), width=500):
+        self.zoom_factor = 1.0
         self.width = width
         self.layer_offset = 0
         self.scaling = np.array(scaling, dtype=float)
@@ -83,6 +84,29 @@ class SegmentEditor:
                 self.view2.dash,            ]
         ])
 
+    def set_corner_index(self, corner_index):
+        self.corner_index = np.array(corner_index, dtype=int)
+        (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
+        self.set_focus(self.focus)
+
+    def set_corner_index_from_pixel(self, pixel_indices, position):
+        """
+        set corner_index so that pixel_indices is in the view of position
+        """
+        print("set_corner_index", pixel_indices, position, self.zoom_factor)
+        unzoomed_pixel_indices = (np.array(pixel_indices) / self.zoom_factor).astype(int)
+        print(" ... unzoomed_pixel_indices", unzoomed_pixel_indices)
+        [A, B] = self.view_indices(position)
+        [Ai, Bi] = unzoomed_pixel_indices
+        corner_index = self.corner_index.copy()
+        print(" ... corner_index before", corner_index)
+        corner_index[A] = Ai# + self.voxels_per_width[A] // 2
+        corner_index[B] = Bi# + self.voxels_per_width[B] // 2
+        print(" ... corner_index after 1", corner_index)
+        corner_index = np.clip(corner_index, 0, np.array(self.labels.shape) - self.voxels_per_width)
+        print(" ... corner_index after 2", corner_index)
+        self.set_corner_index(corner_index)
+
     def sliced_arrays(self):
         (I, J, K) = self.corner_index
         (dI, dJ, dK) = self.voxels_per_width
@@ -106,15 +130,29 @@ class SegmentEditor:
         """
         width = self.width
         layer = self.get_layer(from_array, position)
-        shape = np.array(layer.shape)
+        [A, B] = self.view_indices(position)
+        shape = np.array(layer.shape) * self.scaling[[A, B]]
         zoomfactor = width / shape.max()
+        self.zoom_factor = zoomfactor
+        print("zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
         zoomed = zoom(layer, zoomfactor, order=0)
+        print("zoomed shape", zoomed.shape)
         return zoomed
+
+    def zoomed_focus(self, position):
+        focus = self.focus
+        [A, B] = self.view_indices(position)
+        unzoomed_focus = self.focus2d(position)
+        shifted_focus = unzoomed_focus + self.corner_index[[A, B]]
+        zoomed_focus = (shifted_focus * self.zoom_factor).astype(int)
+        print(f"zoomed_focus: position {position}, AB {A}, {B}, unzoomed_focus {unzoomed_focus},"
+              f" corner_index {self.corner_index[[A, B]]}, shifted_focus {shifted_focus}, zoom_factor {self.zoom_factor}, zoomed_focus {zoomed_focus}")
+        return zoomed_focus
 
     def focus2d(self, position):
         focus = self.focus
         [A, B] = self.view_indices(position)
-        result = (focus[A], focus[B])
+        result = np.array([focus[A], focus[B]], dtype=int)
         #print(f"focus2d: position {position}, AB {A}, {B}, input focus {focus}, output focus {result}")
         return result
 
@@ -206,7 +244,7 @@ class SegmentEditor:
                     self.zoom.update_image(
                         labels=self.get_zoomed_labels(0),
                         intensities=self.get_zoomed_intensities(0),
-                        focus=focus2d,
+                        focus=self.zoomed_focus(0),
                     )
             else:
                 layer.update_image(focus=focus2d)

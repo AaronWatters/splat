@@ -341,12 +341,15 @@ class LayerView:
         im.on_pixel(self.stop_tracking, type="pointerleave")
         self.update_image()
 
+    def update_editor(self, i, j):
+        self.editor.change_layer(i, j, self.index)
+
     def start_tracking(self, event):
         self.tracking = True
         self.info.text(f"LayerView index {self.pos()} tracking started.")
         self.img.css({"cursor": "crosshair"})
         [i, j] = [event["pixel_row"], event["pixel_column"]]
-        self.editor.change_layer(i, j, self.index)
+        self.update_editor(i, j)
 
     def stop_tracking(self, event):
         self.tracking = False
@@ -358,12 +361,12 @@ class LayerView:
         value = self.labels[i, j]
         self.info.text(f"LayerView index {self.pos()} mouse move at {i}, {j}, value: {value}")
         if self.tracking:
-            self.editor.change_layer(i, j, self.index)
+            self.update_editor(i, j)
 
     def click_callback(self, event):
         [i, j] = [event["pixel_row"], event["pixel_column"]]
         self.info.text(f"LayerView index {self.pos()} clicked.")
-        self.editor.change_layer(i, j, self.index)
+        self.update_editor(i, j)
 
     def message(self, text):
         self.info.text(text)
@@ -393,15 +396,12 @@ class ZoomView(LayerView):
         self.dash = gz.Stack([self.info, self.img])
         return self.dash
 
-    def move_callback(self, event):
-        # do nothing for now
-        pass
-
-    def click_callback(self, event):
-        # do nothing for now
-        pass
+    def update_editor(self, i, j):
+        self.editor.set_corner_index_from_pixel([i, j], self.index)
 
     def update_image(self, labels=None, intensities=None, focus=None):
+        if focus is not None:
+            self.focus = np.array(focus, dtype=int)
         if labels is not None:
             self.labels = labels
         if intensities is not None:
@@ -409,6 +409,7 @@ class ZoomView(LayerView):
         mix = self.editor.mix_level()
         label_colors = self.editor.label_colors()
         carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
+        xmark(carray, self.focus)
         self.img.change_array(carray, scale=False)
 
 def fill_from_point(array, start_point=None, to_target=255):
