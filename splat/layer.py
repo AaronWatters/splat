@@ -19,7 +19,7 @@ class Layer:
     """
 
     def __init__(self, labels, intensities, editor=None, width=None, height=None, max_label=None):
-        print("Layer.__init__", width, height, labels.shape, intensities.shape)
+        #pr("Layer.__init__", width, height, labels.shape, intensities.shape)
         self.original_labels = labels
         self.current_labels = labels.copy()
         shape = np.array(labels.shape)
@@ -82,7 +82,7 @@ class Layer:
         self.focus = shape // 2
         self._modified = False
         self.dash.call_when_started(self.init_image)
-        print ("Layer.__init__ done")
+        #pr ("Layer.__init__ done")
 
     def checkpoint(self, *ignored):
         self.undo_labels_history.append(self.current_labels.copy())
@@ -150,7 +150,7 @@ class Layer:
         #gz.do(self.interaction_dropdown.element.open())
         #gz.do(log("selected value:", sel.val()))
         #gz.do(log("selected text:", sel.find("option:selected").text()))
-        #print("id 2 value", self.interaction_dropdown.id2value)
+        ##pr("id 2 value", self.interaction_dropdown.id2value)
 
     def change_arrays(self, labels, intensities):
         self.original_labels = labels
@@ -182,7 +182,7 @@ class Layer:
         self._modified = True
 
     def init_image(self):
-        #print("Layer.init_image")
+        ##pr("Layer.init_image")
         #return
         im = self.image
         im.css({"image-rendering": "pixelated"})
@@ -199,7 +199,7 @@ class Layer:
         self.select_label(self.selected_label)
         self.interaction = layer_interaction.PickInteraction(self)
         #gz.do(im.window.alert("Layer image initialized. Use the dropdown to select interaction mode."))
-        #print("Layer.init_image done")
+        ##pr("Layer.init_image done")
 
     def on_keypress(self, event):
         keyCode = event["keyCode"]
@@ -231,7 +231,7 @@ class Layer:
         if intensities is not None:
             self.intensities = intensities
         carray = self.color_mix_array()
-        #print("edit layer marking at focus", self.focus)
+        ##pr("edit layer marking at focus", self.focus)
         xmark(carray, self.focus)
         self.image.change_array(carray, scale=False)
         if len(self.undo_labels_history) > 0:
@@ -256,7 +256,7 @@ class Layer:
             self.select_label(label)
         except ValueError as e:
             self.info.text(f"Invalid label: {e}.  Should be an integer between 0 and {self.max_label}.")
-            print(f"Invalid label: {value} : {e}")
+            #pr(f"Invalid label: {value} : {e}")
 
     def select_label(self, label):
         self.selected_label = label
@@ -301,9 +301,12 @@ class LayerView:
     """
 
     def __init__(self, labels, intensities, editor, index=1, width=None, height=None):
-        print("LayerView.__init__", width, height, labels.shape, intensities.shape)
+        #pr(self.__init__, width, height, labels.shape, intensities.shape)
         self.labels = labels
         self.intensities = intensities
+        # debug sanity check: not all intensities should be zero
+        #if np.all(self.intensities == 0):
+        #    raise ValueError("All intensities are zero in LayerView")
         self.editor = editor
         self.index = index
         self.width = width
@@ -372,7 +375,14 @@ class LayerView:
         self.info.text(text)
 
     def update_image(self, labels=None, intensities=None, focus=None):
+        #pr("LayerView.update_image", 
+        #      labels.shape if labels is not None else None, 
+        #      intensities.shape if intensities is not None else None, 
+        #      focus)
+        # error if focus is outside the bounds of the labels array
         if focus is not None:
+            if not (0 <= focus[0] < self.labels.shape[0] and 0 <= focus[1] < self.labels.shape[1]):
+                raise ValueError("Focus is outside the bounds of the labels array")
             self.focus = np.array(focus, dtype=int)
         if labels is not None:
             self.labels = labels
