@@ -19,7 +19,7 @@ class SegmentEditor:
         self.layer_offset = 0
         self.scaling = np.array(scaling, dtype=float)
         self.voxels_per_width = (width / self.scaling).astype(int)
-        self.corner_index = np.array([0, 0, 0], dtype=int)
+        #self.corner_index = np.array([0, 0, 0], dtype=int)
         if labels is None:
             labels = np.zeros_like(intensities, dtype=np.int32)
             maxlabel = MIN_LABELS
@@ -27,47 +27,56 @@ class SegmentEditor:
             maxlabel = max(labels.max(), MIN_LABELS)
         self.maxlabel = maxlabel
         self.labels = labels
+        shape = self.shape = np.array(labels.shape)
+        self.corner_index = np.clip((shape - self.voxels_per_width) // 2, 0, self.shape)
+        #pr("corner_index", self.corner_index, "voxels_per_width", self.voxels_per_width, "shape", shape)
+        #self.scaled_shape = (self.shape * self.scaling).astype(int)
         self.intensities = intensities
         (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
-        self.focus = (np.array(labels.shape) / self.scaling / 2).astype(int)
-        shape = np.array(labels.shape)
+        self.focus = shape // 2
         [I, J, K] = labels.shape
-        zoom = max(1.0, width / shape.max())
-        print ("SegmentEditor.__init__", labels.shape, intensities.shape, zoom)
-        self.zoom = zoom
+        [cI, cJ, cK] = self.corner_index
+        [dI, dJ, dK] = self.voxels_per_width
+        #zoom = max(1.0, width / shape.max())
+        #pr ("SegmentEditor.__init__", labels.shape, intensities.shape)
         [fI, fJ, fK] = self.focus
+        [sI, sJ, sK] = shape * self.scaling
         self.layer_slider = gz.Slider(
-            minimum=0, maximum=I-1, value=fI, step=1, orientation="vertical",
+            minimum=cI, 
+            maximum=min(cI + dI - 1, I - 1),
+            value=fI, 
+            step=1, 
+            orientation="vertical",
             on_change=self.slide_layer)
         self.layer_slider.css({"height": f"{width}px"})
         self.layer = layer.Layer(
             self.get_labels(0), #labels[fI, :, :],
             self.get_intensities(0), #intensities[fI, :, :],
             editor=self,
-            width=int(zoom * K), 
-            height=int(zoom * J), 
+            width=min(sJ, width),
+            height=min(sK, width),
             max_label=self.maxlabel)
         self.zoom = layer.ZoomView(
             self.get_zoomed_labels(0), #labels[fI, :, :],
             self.get_zoomed_intensities(0), #intensities[fI, :, :],
             editor=self,
-            width=width,
-            height=width,
+            width=min(sJ, width),
+            height=min(sK, width),
             index=0,
         )
         self.view1 = layer.LayerView(
             self.get_labels(1), #labels[:, fJ, :],
             self.get_intensities(1), #intensities[:, fJ, :],
-            width=int(zoom * K),
-            height=int(zoom * I),
+            width=min(sJ, width),
+            height=min(sK, width),
             editor=self,
             index=1,
         )
         self.view2 = layer.LayerView(
             self.get_labels(2), #labels[:, :, fK],
             self.get_intensities(2), #intensities[:, :, fK],
-            width=int(zoom * J),
-            height=int(zoom * I),
+            width=min(sJ, width),
+            height=min(sK, width),
             editor=self,
             index=2,
         )
@@ -85,26 +94,31 @@ class SegmentEditor:
         ])
 
     def set_corner_index(self, corner_index):
-        self.corner_index = np.array(corner_index, dtype=int)
+        unclipped_corner_index = np.array(corner_index, dtype=int)
+        clipped_corner_index = np.clip(unclipped_corner_index, 0, np.maximum(0, self.shape - self.voxels_per_width))
+        self.corner_index = clipped_corner_index
         (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
-        self.set_focus(self.focus)
+        focus = self.focus
+        # make sure focus is within the new corner_index and voxels_per_width
+        focus = np.clip(focus, self.corner_index, self.corner_index + self.voxels_per_width)
+        self.set_focus(focus)
 
     def set_corner_index_from_pixel(self, pixel_indices, position):
         """
         set corner_index so that pixel_indices is in the view of position
         """
-        print("set_corner_index", pixel_indices, position, self.zoom_factor)
+        #pr("set_corner_index", pixel_indices, position, self.zoom_factor)
         unzoomed_pixel_indices = (np.array(pixel_indices) / self.zoom_factor).astype(int)
-        print(" ... unzoomed_pixel_indices", unzoomed_pixel_indices)
+        #pr(" ... unzoomed_pixel_indices", unzoomed_pixel_indices)
         [A, B] = self.view_indices(position)
         [Ai, Bi] = unzoomed_pixel_indices
         corner_index = self.corner_index.copy()
-        print(" ... corner_index before", corner_index)
+        #pr(" ... corner_index before", corner_index)
         corner_index[A] = Ai# + self.voxels_per_width[A] // 2
         corner_index[B] = Bi# + self.voxels_per_width[B] // 2
-        print(" ... corner_index after 1", corner_index)
+        #pr(" ... corner_index after 1", corner_index)
         corner_index = np.clip(corner_index, 0, np.array(self.labels.shape) - self.voxels_per_width)
-        print(" ... corner_index after 2", corner_index)
+        #pr(" ... corner_index after 2", corner_index)
         self.set_corner_index(corner_index)
 
     def sliced_arrays(self):
@@ -129,46 +143,81 @@ class SegmentEditor:
         fit layer view from from_array so maximum dimension fits in self.width
         """
         width = self.width
-        layer = self.get_layer(from_array, position)
+        print(f"zoom_array: position {position}, from_array shape {from_array.shape}, width {width}")
+        layer = self.get_layer(from_array, position, shift=False)
         [A, B] = self.view_indices(position)
         shape = np.array(layer.shape) * self.scaling[[A, B]]
         zoomfactor = width / shape.max()
         self.zoom_factor = zoomfactor
-        print("zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
+        print(".  zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
         zoomed = zoom(layer, zoomfactor, order=0)
-        print("zoomed shape", zoomed.shape)
+        print(".  zoomed shape", zoomed.shape)
         return zoomed
 
     def zoomed_focus(self, position):
         focus = self.focus
         [A, B] = self.view_indices(position)
         unzoomed_focus = self.focus2d(position)
-        shifted_focus = unzoomed_focus + self.corner_index[[A, B]]
-        zoomed_focus = (shifted_focus * self.zoom_factor).astype(int)
-        print(f"zoomed_focus: position {position}, AB {A}, {B}, unzoomed_focus {unzoomed_focus},"
-              f" corner_index {self.corner_index[[A, B]]}, shifted_focus {shifted_focus}, zoom_factor {self.zoom_factor}, zoomed_focus {zoomed_focus}")
+        #shifted_focus = unzoomed_focus + self.corner_index[[A, B]]
+        zoomed_focus = (unzoomed_focus * self.zoom_factor).astype(int)
+        print(f"zoomed_focus: position {position}, AB {A}, {B}, unzoomed_focus {unzoomed_focus},\n"
+              f" corner_index {self.corner_index[[A, B]]}, zoom_factor {self.zoom_factor}, zoomed_focus {zoomed_focus}")
         return zoomed_focus
 
-    def focus2d(self, position):
-        focus = self.focus
+    def focus2d(self, position, focus3d=None):
+        if focus3d is not None:
+            focus = focus3d
+        else:
+            focus = self.focus
         [A, B] = self.view_indices(position)
         result = np.array([focus[A], focus[B]], dtype=int)
-        #print(f"focus2d: position {position}, AB {A}, {B}, input focus {focus}, output focus {result}")
+        #pr(f"focus2d: position {position}, AB {A}, {B}, input focus {focus}, output focus {result}")
+        return result
+
+    def shifted_focus3d(self, position):
+        focus = self.focus
+        corner_index = self.corner_index
+        # DEBUG: Error if focus is not strictly larger than corner_index
+        if np.any(focus < corner_index):
+            raise ValueError(f"Focus {focus} is less than corner_index {corner_index}. Focus must be greater than or equal to corner_index.")
+        shifted_focus = focus - corner_index
+        clipped_shifted_focus = np.clip(shifted_focus, 0, self.voxels_per_width - 1)
+        #pr(f"shifted_focus3d: position {position}, input focus {focus}, corner_index {self.corner_index}, output shifted_focus {clipped_shifted_focus}")
+        ##pr(f"shifted_focus3d: position {position}, input focus {focus}, corner_index {self.corner_index}, output shifted_focus {shifted_focus}")
+        return clipped_shifted_focus
+
+    def shifted_focus2d(self, position):
+        shifted_focus3d = self.shifted_focus3d(position)
+        result = self.focus2d(position, focus3d=shifted_focus3d)
+        #pr(f"shifted_focus2d: position {position}, output shifted_focus2d {result}")
         return result
 
     def pos(self, base_position):
         return (base_position + self.layer_offset) % 3
 
     def set_layer_offset(self, offset):
+        # don't set layer offset if there are unsaved changes in the current layer
+        if self.layer.modified():
+            self.warning("Commit or revert changes before changing the layer offset.")
+            return
         pos = self.pos(offset)
         self.layer_offset = pos
         self.set_focus(self.focus) # update the views with the new offset
 
-    def get_layer(self, from_array, position):
+    def get_layer(self, from_array, position, shift=True):
         focus = self.focus
-        indexer = self.layer_index(self.pos(position), focus)
+        print(f"get_layer: position {position}, input shape {from_array.shape},")
+        # DEBUG: ERROR IF MIN LAYER SHAPE LESS THAN 10
+        #if np.min(from_array.shape) < 10:
+        #    raise ValueError(f"Layer shape {from_array.shape} is too small. Minimum dimension must be at least 10.")
+        shifted_focus = focus
+        if shift:
+            shifted_focus = np.clip(focus - self.corner_index, 0, self.voxels_per_width - 1)
+        #pr(f"focus {focus}, corner_index {self.corner_index}, shifted_focus {shifted_focus}")
+        indexer = self.layer_index(self.pos(position), shifted_focus)
+        #pr(f"indexer {indexer}, from_array shape {from_array.shape}")
         result = from_array[indexer]
-        #print(f"get_layer: position {position}, input shape {from_array.shape},"
+        ##pr(f"get_layer: position {position}, input shape {from_array.shape},"
         #      f" offset {self.layer_offset}, focus {focus}, indexer {indexer},"
         #      f" result shape {result.shape}")
         return result
@@ -197,7 +246,7 @@ class SegmentEditor:
         layerI = int(self.layer_slider.value)
         focus = self.focus.copy()
         pos0 = self.pos(0)
-        #print (f"slide_layer: layerI {layerI}, focus {focus}, pos0 {pos0}")
+        ##pr (f"slide_layer: layerI {layerI}, focus {focus}, pos0 {pos0}")
         current_layer_index = focus[pos0]
         if self.layer.modified() and layerI != current_layer_index:
             self.warning("Commit or revert changes before leaving the current layer.")
@@ -217,9 +266,14 @@ class SegmentEditor:
                 self.warning("Commit or revert changes before leaving the current layer.")
                 return
         focus = self.focus.copy()
-        [Ai, Bi] = sorted([self.pos(base_index + 1), self.pos(base_index + 2)])
-        focus[Ai] = A
-        focus[Bi] = B
+        [Ai, Bi] = self.view_indices(base_index)
+        #sorted([self.pos(base_index + 1), self.pos(base_index + 2)])
+        corner_index = self.corner_index
+        focus[Ai] = A + corner_index[Ai]
+        focus[Bi] = B + corner_index[Bi]
+        # error if focus not within corner_index and corner_index + voxels_per_width
+        if np.any(focus < corner_index) or np.any(focus >= corner_index + self.voxels_per_width):
+            raise ValueError(f"Focus {focus} is outside the bounds of corner_index {corner_index} and corner_index + voxels_per_width {corner_index + self.voxels_per_width}.")
         self.set_focus(focus)
 
     def set_focus(self, focus): # remove this method after testing
@@ -232,7 +286,7 @@ class SegmentEditor:
             pos = self.pos(position)
             new_value = self.focus[pos]
             old_value = old_focus[pos]
-            focus2d = self.focus2d(position)
+            focus2d = self.shifted_focus2d(position)
             if (not modified)or new_value != old_value or position != 0:
                 indexer = self.layer_index(pos, self.focus)
                 layer.update_image(
