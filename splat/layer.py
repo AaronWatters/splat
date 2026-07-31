@@ -115,6 +115,8 @@ class Layer:
         self.change_arrays(labels, intensities)
         self.info.text("Changes committed.")
         self.locate_at(self.focus) # update images.
+        # set the interaction to pick mode after commit
+        self.set_mode("pick")
         self._modified = False
 
     def modified(self):
