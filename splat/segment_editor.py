@@ -112,6 +112,10 @@ class SegmentEditor:
         #pr(" ... unzoomed_pixel_indices", unzoomed_pixel_indices)
         [A, B] = self.view_indices(position)
         [Ai, Bi] = unzoomed_pixel_indices
+        Aextent = self.voxels_per_width[A]
+        Bextent = self.voxels_per_width[B]
+        Ai = np.clip(Ai - Aextent // 2, 0, self.shape[A] - Aextent)
+        Bi = np.clip(Bi - Bextent // 2, 0, self.shape[B] - Bextent)
         corner_index = self.corner_index.copy()
         #pr(" ... corner_index before", corner_index)
         corner_index[A] = Ai# + self.voxels_per_width[A] // 2
@@ -143,26 +147,31 @@ class SegmentEditor:
         fit layer view from from_array so maximum dimension fits in self.width
         """
         width = self.width
-        print(f"zoom_array: position {position}, from_array shape {from_array.shape}, width {width}")
+        #print(f"zoom_array: position {position}, from_array shape {from_array.shape}, width {width}")
         layer = self.get_layer(from_array, position, shift=False)
         [A, B] = self.view_indices(position)
         shape = np.array(layer.shape) * self.scaling[[A, B]]
         zoomfactor = width / shape.max()
         self.zoom_factor = zoomfactor
-        print(".  zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
+        #print(".  zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
         zoomed = zoom(layer, zoomfactor, order=0)
-        print(".  zoomed shape", zoomed.shape)
+        #print(".  zoomed shape", zoomed.shape)
         return zoomed
 
-    def zoomed_focus(self, position):
-        focus = self.focus
+    def zoomed_focus(self, position, focus3d=None):
         [A, B] = self.view_indices(position)
-        unzoomed_focus = self.focus2d(position)
+        unzoomed_focus = self.focus2d(position, focus3d=focus3d)
         #shifted_focus = unzoomed_focus + self.corner_index[[A, B]]
         zoomed_focus = (unzoomed_focus * self.zoom_factor).astype(int)
-        print(f"zoomed_focus: position {position}, AB {A}, {B}, unzoomed_focus {unzoomed_focus},\n"
-              f" corner_index {self.corner_index[[A, B]]}, zoom_factor {self.zoom_factor}, zoomed_focus {zoomed_focus}")
+        #print(f"zoomed_focus: position {position}, AB {A}, {B}, unzoomed_focus {unzoomed_focus},\n"
+        #      f" corner_index {self.corner_index[[A, B]]}, zoom_factor {self.zoom_factor}, zoomed_focus {zoomed_focus}")
         return zoomed_focus
+
+    def zoomed_corner_index(self, position):
+        return self.zoomed_focus(position, focus3d=self.corner_index)
+
+    def zoomed_voxels_per_width(self, position):
+        return self.zoomed_focus(position, focus3d=self.voxels_per_width)
 
     def focus2d(self, position, focus3d=None):
         if focus3d is not None:
@@ -206,7 +215,7 @@ class SegmentEditor:
 
     def get_layer(self, from_array, position, shift=True):
         focus = self.focus
-        print(f"get_layer: position {position}, input shape {from_array.shape},")
+        #print(f"get_layer: position {position}, input shape {from_array.shape},")
         # DEBUG: ERROR IF MIN LAYER SHAPE LESS THAN 10
         #if np.min(from_array.shape) < 10:
         #    raise ValueError(f"Layer shape {from_array.shape} is too small. Minimum dimension must be at least 10.")
@@ -281,6 +290,7 @@ class SegmentEditor:
         self.focus = np.array(focus)
         #[fI, fJ, fK] = self.focus
         modified = self.layer.modified()
+        print(f"set_focus: old_focus {old_focus}, new focus {self.focus}, modified {modified}")
         self.message(f"Focus set to {self.focus} from {old_focus}.")
         for (position, layer) in [(0, self.layer), (1, self.view1), (2, self.view2)]:
             pos = self.pos(position)
@@ -295,10 +305,15 @@ class SegmentEditor:
                     focus=focus2d,
                 )
                 if position == 0:
+                    labels = self.get_zoomed_labels(0)
+                    intensities = self.get_zoomed_intensities(0)
+                    corner_index = self.zoomed_corner_index(0)
+                    voxels_per_width = self.zoomed_voxels_per_width(0)
                     self.zoom.update_image(
                         labels=self.get_zoomed_labels(0),
                         intensities=self.get_zoomed_intensities(0),
-                        focus=self.zoomed_focus(0),
+                        corner=corner_index,
+                        extent=voxels_per_width,
                     )
             else:
                 layer.update_image(focus=focus2d)

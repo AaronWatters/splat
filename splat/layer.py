@@ -402,6 +402,8 @@ class ZoomView(LayerView):
     A zoomed view of a Layer, for display purposes.
     """
 
+    corner = extent = None # default
+
     def get_dash(self):
         self.img = gz.Image(array=self.intensities, width=self.width, height=self.height, scale=True)
         self.info = gz.Text(f"ZoomView index {self.index}")
@@ -411,9 +413,11 @@ class ZoomView(LayerView):
     def update_editor(self, i, j):
         self.editor.set_corner_index_from_pixel([i, j], self.index)
 
-    def update_image(self, labels=None, intensities=None, focus=None):
-        if focus is not None:
-            self.focus = np.array(focus, dtype=int)
+    def update_image(self, labels=None, intensities=None, corner=None, extent=None):
+        if corner is not None:
+            self.corner = np.array(corner, dtype=int)
+        if extent is not None:
+            self.extent = np.array(extent, dtype=int)
         if labels is not None:
             self.labels = labels
         if intensities is not None:
@@ -421,7 +425,8 @@ class ZoomView(LayerView):
         mix = self.editor.mix_level()
         label_colors = self.editor.label_colors()
         carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
-        xmark(carray, self.focus)
+        if self.corner is not None and self.extent is not None:
+            carray = whiten_outside(carray, self.corner, self.extent)
         self.img.change_array(carray, scale=False)
 
 def fill_from_point(array, start_point=None, to_target=255):
@@ -486,3 +491,16 @@ def xmark(array, focus, size=5):
                 nj = j + dj
                 if 0 <= ni < h and 0 <= nj < w:
                     array[ni, nj] = array[ni, nj] // 2 + whiten
+
+def whiten_outside(array2d, low_indices, indices_extent):
+    """
+    Whiten out the pixels outside the low_indices and indices_extent.
+    """
+    original = array2d.copy()
+    # whiten the whole array
+    array2d[:, :] = (original // 2 + 128)
+    # paste in the middle part
+    i0, j0 = low_indices
+    h, w = indices_extent
+    array2d[i0:i0+h, j0:j0+w] = original[i0:i0+h, j0:j0+w]
+    return array2d
