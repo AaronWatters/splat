@@ -93,6 +93,9 @@ class SegmentEditor:
                 self.view2.dash,            ]
         ])
 
+    def get_labels_volume(self):
+        return self.labels
+
     def set_corner_index(self, corner_index):
         unclipped_corner_index = np.array(corner_index, dtype=int)
         clipped_corner_index = np.clip(unclipped_corner_index, 0, np.maximum(0, self.shape - self.voxels_per_width))
