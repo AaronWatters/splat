@@ -41,6 +41,7 @@ class SegmentEditor:
         #pr ("SegmentEditor.__init__", labels.shape, intensities.shape)
         [fI, fJ, fK] = self.focus
         [sI, sJ, sK] = shape * self.scaling
+        # layer slider removed for now.
         self.layer_slider = gz.Slider(
             minimum=cI, 
             maximum=min(cI + dI - 1, I - 1),
@@ -48,6 +49,8 @@ class SegmentEditor:
             step=1, 
             orientation="vertical",
             on_change=self.slide_layer)
+        self.layer_down_button = gz.Button("\u25B2", on_click=self.layer_down)
+        self.layer_up_button = gz.Button("\u25BC", on_click=self.layer_up)
         self.layer_slider.css({"height": f"{width}px"})
         self.layer = layer.Layer(
             self.get_labels(0), #labels[fI, :, :],
@@ -82,7 +85,12 @@ class SegmentEditor:
         )
         self.info = gz.Text("Click on a view to change the focus slice. Use the layer view to edit labels.")
         self.dash = gz.Shelf([
-            self.layer_slider,
+            #self.layer_slider,
+            gz.Stack([
+                # upper layers are at the bottom :)
+                self.layer_down_button,
+                self.layer_up_button,
+            ]),
             [
                 self.layer.dash,
                 self.zoom.dash,
@@ -271,6 +279,34 @@ class SegmentEditor:
         focus[pos0] = layerI
         self.set_focus(focus)
 
+    def layer_up(self, *ignored):
+        if self.layer.modified():
+            self.warning("Commit or revert changes before leaving the current layer.")
+            return
+        focus = self.focus.copy()
+        pos0 = self.pos(0)
+        current_layer_index = focus[pos0]
+        new_layer_index = current_layer_index + 1
+        if new_layer_index >= self.shape[pos0]:
+            self.warning("Cannot move up: already at the top layer.")
+            return
+        focus[pos0] = new_layer_index
+        self.set_focus(focus)
+
+    def layer_down(self, *ignored):
+        if self.layer.modified():
+            self.warning("Commit or revert changes before leaving the current layer.")
+            return
+        focus = self.focus.copy()
+        pos0 = self.pos(0)
+        current_layer_index = focus[pos0]
+        new_layer_index = current_layer_index - 1
+        if new_layer_index < 0:
+            self.warning("Cannot move down: already at the bottom layer.")
+            return
+        focus[pos0] = new_layer_index
+        self.set_focus(focus)
+
     def change_layer(self, A, B, base_index):
         #index = self.pos(base_index)
         if base_index > 0:
@@ -293,7 +329,7 @@ class SegmentEditor:
         self.focus = np.array(focus)
         #[fI, fJ, fK] = self.focus
         modified = self.layer.modified()
-        print(f"set_focus: old_focus {old_focus}, new focus {self.focus}, modified {modified}")
+        #print(f"set_focus: old_focus {old_focus}, new focus {self.focus}, modified {modified}")
         self.message(f"Focus set to {self.focus} from {old_focus}.")
         for (position, layer) in [(0, self.layer), (1, self.view1), (2, self.view2)]:
             pos = self.pos(position)
