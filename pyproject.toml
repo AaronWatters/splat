@@ -12,6 +12,7 @@ dependencies = ["numpy", "h5gizmos", "scipy", "tifffile"]
 
 [project.scripts]
 inspect-npy = "splat.inspect_npy:main"
+intense-edit = "splat.intense_edit:main"
 
 [project.optional-dependencies]
 test = ["pytest"]
