@@ -70,7 +70,10 @@ class VolumeIO:
         self.description = description
         self.path = path
         self.volume = None
-        self.info_text = gz.Text(f"enter path for {description}")
+        prompt = f"enter path for loading {description}"
+        if for_saving:
+            prompt = f"enter path for saving {description}"
+        self.info_text = gz.Text(prompt)
         self.input = gz.Input(size=50, title=description, initial_value=path)
         self.for_saving = for_saving
         self.get_volume = get_volume
