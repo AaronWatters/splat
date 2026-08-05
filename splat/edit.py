@@ -71,7 +71,7 @@ class VolumeIO:
         self.path = path
         self.volume = None
         self.info_text = gz.Text(f"enter path for {description}")
-        self.input = gz.Input(size=50, title=description)
+        self.input = gz.Input(size=50, title=description, initial_value=path)
         self.for_saving = for_saving
         self.get_volume = get_volume
         if for_saving:
