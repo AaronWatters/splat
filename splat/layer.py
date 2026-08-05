@@ -61,6 +61,7 @@ class Layer:
         self.label_div = gz.Html("<div style='display:inline-block; width: 4em; height: 4em; background-color: red;'></div>")
         self.commit_button = gz.Button("Commit", on_click=self.commit)
         self.undo_button = gz.Button("Undo", on_click=self.undo)
+        self.new_label_button = gz.Button("New Label", on_click=self.new_label)
         self.checkpoint_button = gz.Button("Checkpoint", on_click=self.checkpoint)
         self.revert_button = gz.Button("Revert", on_click=self.revert)
         self.dash = gz.Stack([
@@ -68,7 +69,10 @@ class Layer:
             self.mix_slider,
             self.image,
             [
-                self.label_input, 
+                gz.Stack([
+                    self.label_input, 
+                    self.new_label_button,
+                ]),
                 self.label_div,
                 self.interaction_dropdown,
                 ],
@@ -83,6 +87,14 @@ class Layer:
         self._modified = False
         self.dash.call_when_started(self.init_image)
         #pr ("Layer.__init__ done")
+
+    def new_label(self, *ignored):
+        self.max_label += 1
+        self.label_colors = np.array([(0,0,0)] + list(color_list.get_colors(self.max_label)), dtype=int)
+        self.select_label(self.max_label)
+        if self.editor is not None:
+            self.editor.maxlabel = self.max_label
+        self.info.text(f"New label {self.max_label} created.")
 
     def checkpoint(self, *ignored):
         self.undo_labels_history.append(self.current_labels.copy())
