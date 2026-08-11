@@ -3,6 +3,8 @@
 Edit volume segmentation labels.
 """
 
+from xxlimited import new
+
 import numpy as np
 import H5Gizmos as gz
 from numpy.strings import index
@@ -104,12 +106,13 @@ class SegmentEditor:
     def get_labels_volume(self):
         return self.labels
 
-    def set_corner_index(self, corner_index):
+    def set_corner_index(self, corner_index, focus=None):
         unclipped_corner_index = np.array(corner_index, dtype=int)
         clipped_corner_index = np.clip(unclipped_corner_index, 0, np.maximum(0, self.shape - self.voxels_per_width))
         self.corner_index = clipped_corner_index
         (self.sliced_labels, self.sliced_intensities) = self.sliced_arrays()
-        focus = self.focus
+        if focus is None:
+            focus = self.focus
         # make sure focus is within the new corner_index and voxels_per_width
         focus = np.clip(focus, self.corner_index, self.corner_index + self.voxels_per_width)
         self.set_focus(focus)
@@ -160,8 +163,9 @@ class SegmentEditor:
         width = self.width
         #print(f"zoom_array: position {position}, from_array shape {from_array.shape}, width {width}")
         layer = self.get_layer(from_array, position, shift=False)
+        #print(".  layer shape", layer.shape, "scaling", self.scaling)
         [A, B] = self.view_indices(position)
-        shape = np.array(layer.shape) * self.scaling[[A, B]]
+        shape = np.array(layer.shape)# * self.scaling[[A, B]]
         zoomfactor = width / shape.max()
         self.zoom_factor = zoomfactor
         #print(".  zoomfactor", zoomfactor, "layer shape", layer.shape, "width", width)
@@ -198,8 +202,9 @@ class SegmentEditor:
         focus = self.focus
         corner_index = self.corner_index
         # DEBUG: Error if focus is not strictly larger than corner_index
-        if np.any(focus < corner_index):
-            raise ValueError(f"Focus {focus} is less than corner_index {corner_index}. Focus must be greater than or equal to corner_index.")
+        #if np.any(focus < corner_index):
+        #    raise ValueError(f"Focus {focus} is less than corner_index {corner_index}. Focus must be greater than or equal to corner_index.")
+        self.corner_index = corner_index = np.minimum(corner_index, focus)
         shifted_focus = focus - corner_index
         clipped_shifted_focus = np.clip(shifted_focus, 0, self.voxels_per_width - 1)
         #pr(f"shifted_focus3d: position {position}, input focus {focus}, corner_index {self.corner_index}, output shifted_focus {clipped_shifted_focus}")
@@ -320,9 +325,17 @@ class SegmentEditor:
         focus[Ai] = A + corner_index[Ai]
         focus[Bi] = B + corner_index[Bi]
         # error if focus not within corner_index and corner_index + voxels_per_width
-        if np.any(focus < corner_index) or np.any(focus >= corner_index + self.voxels_per_width):
-            raise ValueError(f"Focus {focus} is outside the bounds of corner_index {corner_index} and corner_index + voxels_per_width {corner_index + self.voxels_per_width}.")
-        self.set_focus(focus)
+        #if np.any(focus < corner_index) or np.any(focus >= corner_index + self.voxels_per_width):
+        #    raise ValueError(f"Focus {focus} is outside the bounds of corner_index {corner_index} and corner_index + voxels_per_width {corner_index + self.voxels_per_width}.")
+        upper_bound = corner_index + self.voxels_per_width - 1
+        overshoot = np.maximum(focus - upper_bound, 0)
+        undershoot = np.maximum(corner_index - focus, 0)
+        # adjust corner_index to keep focus within bounds
+        max_corner_index = self.shape - self.voxels_per_width
+        new_corner_index = np.clip(corner_index + overshoot, 0, max_corner_index)
+        new_corner_index = np.clip(new_corner_index - undershoot, 0, max_corner_index)
+        self.set_corner_index(new_corner_index, focus=focus)
+        #self.set_focus(focus) # implicitly called by set_corner_index
 
     def set_focus(self, focus): # remove this method after testing
         old_focus = self.focus # old focus
