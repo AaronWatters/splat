@@ -437,6 +437,7 @@ class ZoomView(LayerView):
         mix = self.editor.mix_level()
         label_colors = self.editor.label_colors()
         carray = color_mix_array(mix, self.labels, label_colors, self.intensities)
+        #print("ZoomView.update_image", self.corner, self.extent, carray.shape)
         if self.corner is not None and self.extent is not None:
             carray = whiten_outside(carray, self.corner, self.extent)
         self.img.change_array(carray, scale=False)
